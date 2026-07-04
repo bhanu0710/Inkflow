@@ -5,7 +5,9 @@ import helmet from "helmet";
 
 import { env } from "./config/env.js";
 import { healthRouter } from "./health/index.js";
+import { apiRouter } from "./routes/index.js";
 import { httpLogger } from "./lib/logger/index.js";
+
 import { swaggerUiServe, swaggerUiSetup } from "./lib/swagger/index.js";
 import { requestContextMiddleware } from "./middlewares/request-context.middleware.js";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware.js";
@@ -31,7 +33,9 @@ export const createApp = () => {
 
   // 6. Routes
   app.use(healthRouter);
+  app.use("/api/v1", apiRouter);
   app.use("/docs", ...swaggerUiServe, swaggerUiSetup);
+
 
   // 7. 404 Handler
   app.use(notFoundMiddleware);

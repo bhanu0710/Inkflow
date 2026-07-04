@@ -11,8 +11,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().url(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]),
   SWAGGER_TITLE: z.string().min(1),
-  SWAGGER_VERSION: z.string().min(1)
+  SWAGGER_VERSION: z.string().min(1),
+  BCRYPT_COST: z.coerce.number().int().positive().default(10)
 });
+
 
 export type Env = z.infer<typeof envSchema>;
 
