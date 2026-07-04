@@ -1,19 +1,17 @@
 import type { Request, Response } from "express";
+import type { HealthService } from "./health.service.js";
 
-import {
-  getHealthStatus,
-  getLivenessStatus,
-  getReadinessStatus
-} from "./health.service.js";
+export class HealthController {
+  constructor(private readonly healthService: HealthService) {}
 
-export const healthController = (_request: Request, response: Response) => {
-  response.status(200).json(getHealthStatus());
-};
+  getLiveness = (_request: Request, response: Response): void => {
+    const status = this.healthService.getLivenessStatus();
+    response.status(200).json(status);
+  };
 
-export const readinessController = (_request: Request, response: Response) => {
-  response.status(200).json(getReadinessStatus());
-};
-
-export const livenessController = (_request: Request, response: Response) => {
-  response.status(200).json(getLivenessStatus());
-};
+  getReadiness = async (_request: Request, response: Response): Promise<void> => {
+    const status = await this.healthService.getReadinessStatus();
+    const statusCode = status.status === "ok" ? 200 : 503;
+    response.status(statusCode).json(status);
+  };
+}

@@ -1,15 +1,33 @@
+import { checkDatabaseHealth } from "../lib/health/db-check.js";
+
 export interface HealthStatus {
-  status: "ok";
+  status: "ok" | "error";
+  details?: {
+    database: "up" | "down";
+  };
 }
 
-export const getHealthStatus = (): HealthStatus => ({
-  status: "ok"
-});
+export class HealthService {
+  getLivenessStatus(): HealthStatus {
+    return { status: "ok" };
+  }
 
-export const getReadinessStatus = (): HealthStatus => ({
-  status: "ok"
-});
+  async getReadinessStatus(): Promise<HealthStatus> {
+    try {
+      const isDbUp = await checkDatabaseHealth();
+      if (isDbUp) {
+        return {
+          status: "ok",
+          details: { database: "up" },
+        };
+      }
+    } catch {
+      // db is down
+    }
 
-export const getLivenessStatus = (): HealthStatus => ({
-  status: "ok"
-});
+    return {
+      status: "error",
+      details: { database: "down" },
+    };
+  }
+}
