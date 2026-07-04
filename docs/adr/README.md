@@ -1,22 +1,11 @@
 # Architecture Decision Records
 
-ADRs document significant technical decisions for Infragence. Each ADR should include context, decision, alternatives, tradeoffs, and consequences.
+ADRs document architecture decisions that have been made for InkFlow.
 
-## Records
+## Accepted ADRs
 
-- [ADR-001: Use a Modular Monolith for the MVP](ADR-001-modular-monolith.md)
-- [ADR-002: Use PostgreSQL as the System of Record](ADR-002-postgresql.md)
-- [ADR-003: Use FastAPI for the Backend](ADR-003-fastapi.md)
-- [ADR-004: Use an Event-Driven Domain Model](ADR-004-event-driven-domain-model.md)
-- [ADR-005: Build Infrastructure Intelligence, Not an AI Chatbot](ADR-005-infrastructure-intelligence-not-ai-chat.md)
-
-## When to Add an ADR
-
-Add or update an ADR when a decision:
-
-- Is expensive to reverse.
-- Changes system boundaries.
-- Introduces a new stateful dependency.
-- Changes security, data retention, or tenant isolation.
-- Establishes a long-lived product or engineering principle.
-
+- [ADR-001: Monorepo Architecture](ADR-001-monorepo-architecture.md)
+- [ADR-002: React and Vite Frontend](ADR-002-react-vite.md)
+- [ADR-003: Node.js and Express Backend](ADR-003-node-express-backend.md)
+- [ADR-004: PostgreSQL and Prisma](ADR-004-postgresql-prisma.md)
+- [ADR-005: Modular Monolith](ADR-005-modular-monolith.md)
