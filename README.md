@@ -188,5 +188,7 @@ It enforces codebase standards and validation rules by executing the following p
 5. **Compilation Verification**: Verifies full TypeScript builds compile with no errors.
 6. **Test Suite Execution**: Ensures all integration and unit tests pass successfully.
 7. **Docker Build Verification**: Verifies both application Dockerfiles build successfully under Docker Buildx.
+8. **Security Vulnerability Scanning**: Automatically scans both images using Trivy, failing on CRITICAL vulnerabilities.
+
 
 
