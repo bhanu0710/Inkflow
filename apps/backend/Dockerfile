@@ -16,7 +16,7 @@ RUN npm run prisma:generate --workspace @inkflow/backend
 RUN npm run build --workspace @inkflow/backend
 
 FROM node:22-alpine AS runtime
-
+RUN apk update && apk upgrade --no-cache
 ENV NODE_ENV=production
 
 WORKDIR /app

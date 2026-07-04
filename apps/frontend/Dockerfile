@@ -17,7 +17,9 @@ COPY apps/frontend apps/frontend
 
 RUN npm run build --workspace @inkflow/frontend
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.27.5-alpine AS runtime
+
+RUN apk update && apk upgrade --no-cache
 
 COPY apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/frontend/dist /usr/share/nginx/html
