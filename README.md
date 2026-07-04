@@ -40,6 +40,17 @@ Current foundation scope:
 - No frontend pages
 - No application database models
 
+The complete architecture-freeze documentation lives under `docs/`:
+
+- [Architecture](docs/architecture/ARCHITECTURE.md)
+- [Domain Model](docs/design/DOMAIN_MODEL.md)
+- [Database Design](docs/design/DATABASE_DESIGN.md)
+- [API Specification](docs/api/API_SPECIFICATION.md)
+- [Authorization](docs/design/AUTHORIZATION.md)
+- [Security](docs/design/SECURITY.md)
+- [Refresh Token Lifecycle](docs/design/REFRESH_TOKEN_LIFECYCLE.md)
+- [Architecture Decision Records](docs/adr/README.md)
+
 ## Technology Stack
 
 | Area | Technology |
