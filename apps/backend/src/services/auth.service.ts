@@ -1,24 +1,26 @@
-import { randomBytes, createHash } from "node:crypto";
 import bcrypt from "bcrypt";
 import type { User } from "@prisma/client";
 import { env } from "../config/env.js";
-import type { UserRepository, RefreshTokenRepository, TransactionManager } from "../repositories/index.js";
+import type { UserRepository, TransactionManager } from "../repositories/index.js";
+import type { TokenService } from "./token.service.js";
+import { AuthenticationError } from "../errors/app.errors.js";
 
 /**
  * Authentication service orchestration.
  *
  * Responsibilities:
  * - Hash client passwords safely using configurable BCRYPT_COST.
- * - Coordinate user creation and refresh token creation under a single database transaction.
+ * - Coordinate user creation and credentials validation.
+ * - Delegate refresh token generation and storage to the TokenService.
+ * - Delegate JWT access token generation to the TokenService.
  *
  * Non-responsibilities:
- * - JWT generation, cookie handling, or writing to HTTP responses.
- * - Uniqueness pre-checks (delegated to PostgreSQL unique constraints and repository unique constraint mapping).
+ * - Direct HTTP transport handling, cookie writing, or cookie session parsing.
  */
 export class AuthService {
   constructor(
     private readonly userRepository: UserRepository,
-    private readonly refreshTokenRepository: RefreshTokenRepository,
+    private readonly tokenService: TokenService,
     private readonly transactionManager: TransactionManager
   ) {}
 
@@ -27,21 +29,11 @@ export class AuthService {
     username: string;
     displayName: string;
     password: string;
-  }): Promise<{ user: Omit<User, "passwordHash">; refreshToken: string }> {
+  }): Promise<{ user: Omit<User, "passwordHash">; accessToken: string; refreshToken: string }> {
     const saltRounds = env.BCRYPT_COST;
     const passwordHash = await bcrypt.hash(data.password, saltRounds);
 
-    /**
-     * Plaintext refresh token is returned in the payload JSON response.
-     * [ARCHITECTURE NOTE]: This is a temporary implementation. Future Login/Auth stories
-     * will implement secure HttpOnly cookie session transport for refresh tokens.
-     * The underlying database persistence model should remain unchanged.
-     */
-    const plaintextToken = randomBytes(40).toString("hex");
-    const tokenHash = createHash("sha256").update(plaintextToken).digest("hex");
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    let plaintextToken = "";
 
     const result = await this.transactionManager.run(async (tx) => {
       const createdUser = await this.userRepository.create(
@@ -54,16 +46,14 @@ export class AuthService {
         tx
       );
 
-      await this.refreshTokenRepository.create(
-        {
-          userId: createdUser.id,
-          tokenHash,
-          expiresAt,
-        },
-        tx
-      );
+      plaintextToken = await this.tokenService.createRefreshToken(createdUser.id, tx);
 
       return createdUser;
+    });
+
+    const accessToken = this.tokenService.generateAccessToken({
+      id: result.id,
+      email: result.email,
     });
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -71,6 +61,37 @@ export class AuthService {
 
     return {
       user: userWithoutHash,
+      accessToken,
+      refreshToken: plaintextToken,
+    };
+  }
+
+  async login(data: {
+    email: string;
+    password: string;
+  }): Promise<{ user: Omit<User, "passwordHash">; accessToken: string; refreshToken: string }> {
+    const user = await this.userRepository.findByEmail(data.email);
+    if (!user) {
+      throw new AuthenticationError("Invalid email or password");
+    }
+
+    const isPasswordMatch = await bcrypt.compare(data.password, user.passwordHash);
+    if (!isPasswordMatch) {
+      throw new AuthenticationError("Invalid email or password");
+    }
+
+    const plaintextToken = await this.tokenService.createRefreshToken(user.id);
+    const accessToken = this.tokenService.generateAccessToken({
+      id: user.id,
+      email: user.email,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _, ...userWithoutHash } = user;
+
+    return {
+      user: userWithoutHash,
+      accessToken,
       refreshToken: plaintextToken,
     };
   }
