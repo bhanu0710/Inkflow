@@ -55,6 +55,10 @@ jobs:
 
       - name: Run Build
         run: npm run build
+      - name: Debug Environment
+        run: |
+         echo "===== CI Environment ====="
+         env | sort | grep -E 'BACKEND|DATABASE|REDIS|JWT|LOG_LEVEL|SWAGGER|BCRYPT|REFRESH|SERVICE|NODE_ENV'
 
       - name: Run Tests
         run: npm run test
@@ -71,7 +75,7 @@ jobs:
           tags: inkflow-backend:ci
           provenance: false
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max 
 
       - name: Build Frontend Docker Image
         uses: docker/build-push-action@v6
