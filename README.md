@@ -173,3 +173,20 @@ timeline
   Sprint 4 : Reading and discovery workflows
   Sprint 5 : Production observability and deployment hardening
 ```
+
+## Continuous Integration
+
+Continuous Integration (CI) runs automatically via GitHub Actions on:
+- Every push to the `main` branch.
+- Every Pull Request targeting the `main` branch.
+
+It enforces codebase standards and validation rules by executing the following pipeline sequentially:
+1. **Checkout & Environment Setup**: Mounts Node.js 20 with eager NPM caching.
+2. **Dependency Installation**: Executes clean installer via `npm ci`.
+3. **ORM Code Generation**: Instantiates Prisma DB Client models.
+4. **Static Analysis & Linting**: Runs ESLint checks across both frontend and backend.
+5. **Compilation Verification**: Verifies full TypeScript builds compile with no errors.
+6. **Test Suite Execution**: Ensures all integration and unit tests pass successfully.
+7. **Docker Build Verification**: Verifies both application Dockerfiles build successfully under Docker Buildx.
+
+
