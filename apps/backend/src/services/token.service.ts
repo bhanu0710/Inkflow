@@ -27,9 +27,13 @@ export interface AccessTokenPayload {
 export class TokenService {
   constructor(private readonly refreshTokenRepository: RefreshTokenRepository) {}
 
+  hashToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
   async createRefreshToken(userId: string, tx?: TransactionContext): Promise<string> {
     const plaintextToken = randomBytes(40).toString("hex");
-    const tokenHash = createHash("sha256").update(plaintextToken).digest("hex");
+    const tokenHash = this.hashToken(plaintextToken);
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + env.REFRESH_TOKEN_TTL_DAYS);
@@ -45,6 +49,7 @@ export class TokenService {
 
     return plaintextToken;
   }
+
 
   generateAccessToken(user: { id: string; email: string }): string {
     try {

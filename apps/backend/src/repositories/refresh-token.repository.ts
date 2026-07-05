@@ -40,7 +40,7 @@ export class RefreshTokenRepository {
     }
   }
 
-  async revoke(id: string, tx?: TransactionContext): Promise<RefreshToken> {
+  async revokeById(id: string, tx?: TransactionContext): Promise<RefreshToken> {
     try {
       return await this.getClient(tx).refreshToken.update({
         where: { id },
@@ -50,6 +50,7 @@ export class RefreshTokenRepository {
       throw mapPrismaError(error, "RefreshToken");
     }
   }
+
 
   async revokeAllByUserId(userId: string, tx?: TransactionContext): Promise<Prisma.BatchPayload> {
     try {

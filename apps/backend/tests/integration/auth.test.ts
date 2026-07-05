@@ -1,13 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 
+
 import request from "supertest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import jwt from "jsonwebtoken";
+import { createHash } from "node:crypto";
 import { env } from "../../src/config/env.js";
 import type { AccessTokenPayload } from "../../src/services/token.service.js";
 import { createApp } from "../../src/app.js";
@@ -24,6 +27,8 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
     },
     refreshToken: {
       create: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
     },
     // Mock transaction to immediately execute the callback with the mock client itself
     $transaction: vi.fn((cb: any) => cb(mockPrisma)),
@@ -33,6 +38,7 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
     disconnectPrisma: vi.fn(),
   };
 });
+
 
 interface TestResponse {
   success: boolean;
@@ -158,4 +164,142 @@ describe("Authentication Integration Tests (Mocked DB)", () => {
       expect(body.error.message).toBe("Invalid email or password");
     });
   });
+
+  describe("POST /api/v1/auth/refresh", () => {
+    const validRawToken = "validPlaintextRefreshTokenHereButExtremelyLongForHex";
+    const validHashedToken = createHash("sha256").update(validRawToken).digest("hex");
+    const testEmail = "test-login-integration@example.com";
+    const testUsername = "testloginintegration";
+    const testDisplayName = "Test User Integration";
+
+    it("should rotate refresh token successfully when given a valid token", async () => {
+      // 1. Mock stored token lookup to return a valid active token
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24), // 1 day in future
+        revokedAt: null,
+        createdAt: new Date(),
+      } as any);
+
+      // 2. Mock user lookup
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: "mock-user-uuid",
+        email: testEmail,
+        username: testUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHash",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      // 3. Mock revoke of old token
+      vi.mocked(prisma.refreshToken.update).mockResolvedValue({
+        id: "mock-token-uuid",
+        revokedAt: new Date(),
+      } as any);
+
+      // 4. Mock create of new token
+      vi.mocked(prisma.refreshToken.create).mockResolvedValue({
+        id: "mock-new-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: "newHash",
+        expiresAt: new Date(),
+        revokedAt: null,
+        createdAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.user.email).toBe(testEmail);
+      expect(body.data.user.passwordHash).toBeUndefined();
+      expect(body.data.accessToken).toBeDefined();
+      expect(body.data.refreshToken).toBeDefined();
+
+      // Assert database calls
+      expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
+        where: { tokenHash: validHashedToken },
+      });
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: "mock-token-uuid" },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(prisma.refreshToken.create).toHaveBeenCalled();
+    });
+
+    it("should fail when refresh token does not exist in database", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(null);
+
+      const response = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({
+          refreshToken: "non-existent-token",
+        });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Invalid refresh token");
+    });
+
+    it("should fail when refresh token is expired", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() - 1000 * 60), // expired 1 min ago
+        revokedAt: null,
+        createdAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Invalid refresh token");
+    });
+
+    it("should fail when refresh token is revoked", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        revokedAt: new Date(), // revoked
+        createdAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .post("/api/v1/auth/refresh")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Invalid refresh token");
+    });
+  });
 });
+

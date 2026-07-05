@@ -3,7 +3,7 @@ import type { AuthService } from "../services/auth.service.js";
 import { created, ok } from "../lib/response/index.js";
 
 /**
- * Authentication controller handling HTTP registrations and logins.
+ * Authentication controller handling HTTP registrations, logins, and token refreshes.
  *
  * Responsibilities:
  * - Map HTTP body inputs to the service parameters.
@@ -52,6 +52,21 @@ export class AuthController {
       });
 
       const responsePayload = ok(loginResult);
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { refreshToken } = req.body as {
+        refreshToken: string;
+      };
+
+      const refreshResult = await this.authService.refresh(refreshToken);
+
+      const responsePayload = ok(refreshResult);
       res.status(200).json(responsePayload);
     } catch (error) {
       next(error);
