@@ -3,6 +3,7 @@ import { PostController } from "../controllers/post.controller.js";
 import { validateRequest } from "../validation/index.js";
 import { createPostSchema } from "../validation/schemas/post/create-post.schema.js";
 import { getPostSchema } from "../validation/schemas/post/get-post.schema.js";
+import { updatePostSchema } from "../validation/schemas/post/update-post.schema.js";
 import { createAuthMiddleware } from "../middlewares/auth.middleware.js";
 import { PostRepository, RefreshTokenRepository } from "../repositories/index.js";
 import { PostService } from "../services/post.service.js";
@@ -25,4 +26,8 @@ postRouter.post("/", authenticate, validateRequest(createPostSchema), (req, res,
 
 postRouter.get("/:postId", authenticate, validateRequest(getPostSchema), (req, res, next) => {
   postController.getById(req, res, next).catch(next);
+});
+
+postRouter.patch("/:postId", authenticate, validateRequest(updatePostSchema), (req, res, next) => {
+  postController.update(req, res, next).catch(next);
 });

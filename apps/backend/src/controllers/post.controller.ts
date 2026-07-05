@@ -60,4 +60,30 @@ export class PostController {
       next(error);
     }
   };
+
+  update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AuthenticationError("Authentication required");
+      }
+
+      const { postId } = req.params as { postId: string };
+      const { title, markdownContent } = req.body as {
+        title?: string;
+        markdownContent?: string;
+      };
+
+      const updatedPost = await this.postService.update(postId, currentUserId, {
+        title,
+        markdownContent,
+      });
+
+      const responsePayload = ok(updatedPost);
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+

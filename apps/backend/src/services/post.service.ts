@@ -1,6 +1,7 @@
 import type { Post } from "@prisma/client";
 import type { PostRepository } from "../repositories/post.repository.js";
-import { NotFoundError } from "../errors/app.errors.js";
+import { NotFoundError, ConflictError } from "../errors/app.errors.js";
+
 
 
 /**
@@ -74,5 +75,45 @@ export class PostService {
 
     return post;
   }
+
+  async update(
+    postId: string,
+    currentUserId: string,
+    input: { title?: string; markdownContent?: string }
+  ): Promise<Post> {
+    const post = await this.postRepository.findById(postId);
+    if (!post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.authorId !== currentUserId) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.status !== "DRAFT") {
+      throw new ConflictError("Published posts cannot be modified.");
+    }
+
+    const updates: {
+      title?: string;
+      slug?: string;
+      markdownContent?: string;
+      readingTimeMinutes?: number;
+    } = {};
+
+    if (input.title !== undefined && input.title !== post.title) {
+      updates.title = input.title;
+      updates.slug = this.slugify(input.title);
+    }
+
+    if (input.markdownContent !== undefined && input.markdownContent !== post.markdownContent) {
+      updates.markdownContent = input.markdownContent;
+      updates.readingTimeMinutes = this.calculateReadingTime(input.markdownContent);
+    }
+
+    return await this.postRepository.update(postId, updates);
+  }
+
 }
+
 

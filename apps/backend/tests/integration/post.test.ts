@@ -21,7 +21,9 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
     post: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
+
     refreshToken: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -288,5 +290,274 @@ describe("Post Integration Tests (Mocked DB)", () => {
       expect(error.code).toBe("RESOURCE_NOT_FOUND"); // secure 404, not 403 Forbidden!
     });
   });
+
+  describe("PATCH /api/v1/posts/:postId", () => {
+    const testPostId = "8bc7d100-349f-4318-bf12-58b4279b778f";
+
+    it("should successfully update post title, regenerate slug, and retain unchanged values", async () => {
+      const mockPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "Old Title",
+        slug: "old-title",
+        markdownContent: "Unchanged markdown content",
+        status: "DRAFT",
+        readingTimeMinutes: 1,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const updatedTitle = "New Brand Title";
+      const expectedSlug = "new-brand-title";
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPost as any);
+      vi.mocked(prisma.post.update).mockResolvedValueOnce({
+        ...mockPost,
+        title: updatedTitle,
+        slug: expectedSlug,
+      } as any);
+
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          title: updatedTitle,
+        });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.title).toBe(updatedTitle);
+      expect(data.slug).toBe(expectedSlug);
+      expect(data.markdownContent).toBe("Unchanged markdown content");
+      expect(prisma.post.update).toHaveBeenCalledWith({
+        where: { id: testPostId },
+        data: {
+          title: updatedTitle,
+          slug: expectedSlug,
+        },
+      });
+    });
+
+    it("should successfully update markdown content and recalculate reading time", async () => {
+      const mockPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "Unchanged Title",
+        slug: "unchanged-title",
+        markdownContent: "Old content",
+        status: "DRAFT",
+        readingTimeMinutes: 1,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // 400 words = 2 mins reading time
+      const longMarkdownContent = "word ".repeat(400);
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPost as any);
+      vi.mocked(prisma.post.update).mockResolvedValueOnce({
+        ...mockPost,
+        markdownContent: longMarkdownContent,
+        readingTimeMinutes: 2,
+      } as any);
+
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          markdownContent: longMarkdownContent,
+        });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.markdownContent).toBe(longMarkdownContent);
+      expect(data.readingTimeMinutes).toBe(2);
+      expect(prisma.post.update).toHaveBeenCalledWith({
+        where: { id: testPostId },
+        data: {
+          markdownContent: longMarkdownContent,
+          readingTimeMinutes: 2,
+        },
+      });
+    });
+
+    it("should successfully update both title and markdown content at once", async () => {
+      const mockPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "Old Title",
+        slug: "old-title",
+        markdownContent: "Old content",
+        status: "DRAFT",
+        readingTimeMinutes: 1,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const updatedTitle = "Double Update Title";
+      const updatedMarkdown = "This is some new markdown.";
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPost as any);
+      vi.mocked(prisma.post.update).mockResolvedValueOnce({
+        ...mockPost,
+        title: updatedTitle,
+        slug: "double-update-title",
+        markdownContent: updatedMarkdown,
+      } as any);
+
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          title: updatedTitle,
+          markdownContent: updatedMarkdown,
+        });
+
+      expect(response.status).toBe(200);
+    });
+
+    it("should fail with 400 validation error if body contains unknown fields", async () => {
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          title: "New Title",
+          unknownProperty: "value",
+        });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 400 validation error if request body is empty", async () => {
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({});
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 400 when param postId is an invalid UUID", async () => {
+      const response = await request(app)
+        .patch("/api/v1/posts/invalid-uuid")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "New Title" });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 401 when Authorization header is missing", async () => {
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .send({ title: "New Title" });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("UNAUTHENTICATED");
+    });
+
+    it("should fail with 404 when post does not exist", async () => {
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "New Title" });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("should fail with 404 when post is owned by another user (no leaks)", async () => {
+      const mockPostOfAnotherUser = {
+        id: testPostId,
+        authorId: "another-user-uuid-12345",
+        title: "Secret Post",
+        slug: "secret-post",
+        markdownContent: "Secret content",
+        status: "DRAFT",
+        readingTimeMinutes: 5,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPostOfAnotherUser as any);
+
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "Attacker Update" });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("should fail with 409 Conflict if post is not in DRAFT status", async () => {
+      const mockPublishedPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "Published Post",
+        slug: "published-post",
+        markdownContent: "Published content",
+        status: "PUBLISHED", // NOT a DRAFT
+        readingTimeMinutes: 5,
+        publishedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPublishedPost as any);
+
+      const response = await request(app)
+        .patch(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "Update Published" });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(409);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_CONFLICT");
+      expect(error.message).toBe("Published posts cannot be modified.");
+    });
+  });
 });
+
 
