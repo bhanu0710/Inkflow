@@ -7,8 +7,12 @@ const healthController = new HealthController(healthService);
 
 export const healthRouter = Router();
 
-healthRouter.get("/health", healthController.getLiveness);
-healthRouter.get("/live", healthController.getLiveness);
-healthRouter.get("/ready", (req, res, next) => {
-  healthController.getReadiness(req, res).catch(next);
+healthRouter.get("/health/live", healthController.getLiveness);
+
+healthRouter.get("/health/ready", (req, res, next) => {
+  healthController.getReadiness(req, res, next).catch(next);
+});
+
+healthRouter.get("/health", (req, res, next) => {
+  healthController.getCombined(req, res, next).catch(next);
 });

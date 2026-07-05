@@ -1,33 +1,69 @@
+import { env } from "../config/env.js";
 import { checkDatabaseHealth } from "../lib/health/db-check.js";
+import { checkRedisHealth } from "../lib/health/redis-check.js";
 
-export interface HealthStatus {
-  status: "ok" | "error";
-  details?: {
-    database: "up" | "down";
-  };
+export interface ReadinessDetails {
+  database: "UP" | "DOWN";
+  redis: "UP" | "DOWN";
+}
+
+export interface ReadyStatusResponse {
+  status: "UP" | "DOWN";
+  checks: ReadinessDetails;
+}
+
+export interface CombinedStatusResponse {
+  status: "UP" | "DOWN";
+  service: string;
+  environment: string;
+  uptime: number;
+  timestamp: string;
+  checks: ReadinessDetails;
 }
 
 export class HealthService {
-  getLivenessStatus(): HealthStatus {
-    return { status: "ok" };
+  /**
+   * Retrieves the current liveness status of the node process.
+   */
+  getLiveness(): { status: "UP" } {
+    return { status: "UP" };
   }
 
-  async getReadinessStatus(): Promise<HealthStatus> {
-    try {
-      const isDbUp = await checkDatabaseHealth();
-      if (isDbUp) {
-        return {
-          status: "ok",
-          details: { database: "up" },
-        };
-      }
-    } catch {
-      // db is down
-    }
+  /**
+   * Performs quick TCP/SQL checks on database and Redis dependencies.
+   */
+  async getReadiness(): Promise<ReadyStatusResponse> {
+    const [isDbUp, isRedisUp] = await Promise.all([
+      checkDatabaseHealth(),
+      checkRedisHealth(env.REDIS_URL),
+    ]);
+
+    const database = isDbUp ? "UP" : "DOWN";
+    const redis = isRedisUp ? "UP" : "DOWN";
+    const status = isDbUp && isRedisUp ? "UP" : "DOWN";
 
     return {
-      status: "error",
-      details: { database: "down" },
+      status,
+      checks: {
+        database,
+        redis,
+      },
+    };
+  }
+
+  /**
+   * Assembles combined health check statistics.
+   */
+  async getCombined(): Promise<CombinedStatusResponse> {
+    const readiness = await this.getReadiness();
+
+    return {
+      status: readiness.status,
+      service: env.SERVICE_NAME,
+      environment: env.NODE_ENV,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      checks: readiness.checks,
     };
   }
 }
