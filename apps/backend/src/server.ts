@@ -58,8 +58,12 @@ const shutdown = async (signal: NodeJS.Signals) => {
     logger.info("HTTP server stopped");
 
     logger.info("Disconnecting Prisma");
-    await disconnectPrisma();
-    logger.info("Prisma disconnected");
+    try {
+      await disconnectPrisma();
+      logger.info("Prisma disconnected");
+    } catch (dbError) {
+      logger.error({ error: dbError }, "Prisma disconnect failed");
+    }
 
     clearTimeout(forcedShutdownTimer);
     logger.info({ signal }, "Graceful shutdown completed");
@@ -69,6 +73,7 @@ const shutdown = async (signal: NodeJS.Signals) => {
     logger.error({ error, signal }, "Graceful shutdown failed");
     process.exit(1);
   }
+
 };
 
 process.on("SIGTERM", () => {

@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import request from "supertest";
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createApp } from "../../src/app.js";
 import { logger } from "../../src/lib/logger/index.js";
