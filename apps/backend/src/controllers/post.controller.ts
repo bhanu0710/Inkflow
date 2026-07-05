@@ -85,5 +85,24 @@ export class PostController {
       next(error);
     }
   };
+
+  publish = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AuthenticationError("Authentication required");
+      }
+
+      const { postId } = req.params as { postId: string };
+
+      const publishedPost = await this.postService.publish(postId, currentUserId);
+
+      const responsePayload = ok(publishedPost);
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+
 

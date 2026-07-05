@@ -118,6 +118,24 @@ export class PostRepository {
     }
   }
 
+  async publish(
+    id: string,
+    data: {
+      status: PostStatus;
+      publishedAt: Date;
+    },
+    tx?: TransactionContext
+  ): Promise<Post> {
+    try {
+      return await this.getClient(tx).post.update({
+        where: { id },
+        data,
+      });
+    } catch (error) {
+      throw mapPrismaError(error, "Post");
+    }
+  }
+
   async deleteById(id: string, tx?: TransactionContext): Promise<Post> {
     try {
       return await this.getClient(tx).post.delete({ where: { id } });

@@ -1,4 +1,6 @@
 import type { Post } from "@prisma/client";
+
+
 import type { PostRepository } from "../repositories/post.repository.js";
 import { NotFoundError, ConflictError } from "../errors/app.errors.js";
 
@@ -114,6 +116,29 @@ export class PostService {
     return await this.postRepository.update(postId, updates);
   }
 
+  async publish(postId: string, currentUserId: string): Promise<Post> {
+    const post = await this.postRepository.findById(postId);
+    if (!post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.authorId !== currentUserId) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.status === "PUBLISHED") {
+      throw new ConflictError("Post is already published.");
+    }
+
+    const publishedAt = post.publishedAt || new Date();
+
+    return await this.postRepository.publish(postId, {
+      status: "PUBLISHED",
+      publishedAt,
+    });
+  }
 }
+
+
 
 
