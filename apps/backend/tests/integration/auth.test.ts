@@ -11,6 +11,7 @@ import request from "supertest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import jwt from "jsonwebtoken";
 import { createHash } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { env } from "../../src/config/env.js";
 import type { AccessTokenPayload } from "../../src/services/token.service.js";
 import { createApp } from "../../src/app.js";
@@ -24,6 +25,7 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
     user: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
     refreshToken: {
       create: vi.fn(),
@@ -33,6 +35,7 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
     // Mock transaction to immediately execute the callback with the mock client itself
     $transaction: vi.fn((cb: any) => cb(mockPrisma)),
   };
+
   return {
     prisma: mockPrisma,
     disconnectPrisma: vi.fn(),
@@ -656,5 +659,273 @@ describe("Authentication Integration Tests (Mocked DB)", () => {
       expect(body.error.message).toBe("Authentication required");
     });
   });
+
+  describe("PATCH /api/v1/auth/me", () => {
+    const testUserId = "mock-user-uuid";
+    const testEmail = "test-update-integration@example.com";
+    const testUsername = "testupdateintegration";
+    const testDisplayName = "Test User Update Integration";
+
+    it("should successfully update displayName and omit passwordHash", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: testUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const updatedDisplayName = "New Display Name";
+      vi.mocked(prisma.user.update).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: testUsername,
+        displayName: updatedDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          displayName: updatedDisplayName,
+        });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.id).toBe(testUserId);
+      expect(data.email).toBe(testEmail);
+      expect(data.username).toBe(testUsername);
+      expect(data.displayName).toBe(updatedDisplayName);
+      expect(data.passwordHash).toBeUndefined();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: testUserId },
+        data: { displayName: updatedDisplayName, username: undefined },
+      });
+    });
+
+    it("should successfully update username and lowercase/trim it", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: testUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const updatedUsername = "newusername";
+      vi.mocked(prisma.user.update).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: updatedUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          username: "  NewUserName  ", // uppercase and spaces to test transformation
+        });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.username).toBe(updatedUsername);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: testUserId },
+        data: { displayName: undefined, username: updatedUsername },
+      });
+    });
+
+    it("should successfully update both fields at once", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: testUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const updatedUsername = "bothupdated";
+      const updatedDisplayName = "Both Updated Name";
+      vi.mocked(prisma.user.update).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: updatedUsername,
+        displayName: updatedDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          displayName: updatedDisplayName,
+          username: updatedUsername,
+        });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.displayName).toBe(updatedDisplayName);
+      expect(data.username).toBe(updatedUsername);
+    });
+
+    it("should fail validation (400) on empty payload", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({});
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail validation (400) on invalid payload format", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          username: "a", // too short (min 3)
+        });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 409 Conflict if username is duplicate", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+        id: testUserId,
+        email: testEmail,
+        username: testUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHash",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      // Mock prisma.user.update to throw unique constraint Prisma error P2002
+      const prismaError = new Prisma.PrismaClientKnownRequestError(
+        "Unique constraint failed",
+        {
+          code: "P2002",
+          clientVersion: "6.19.3",
+          meta: { target: ["username"] },
+        }
+      );
+      vi.mocked(prisma.user.update).mockRejectedValueOnce(prismaError);
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          username: "takenusername",
+        });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(409);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    });
+
+
+    it("should fail with 401 when Authorization header is missing", async () => {
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .send({ displayName: "Hello" });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+    });
+
+    it("should fail with 401 when user is deleted after token issuance", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .patch("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ displayName: "Hello" });
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+    });
+  });
 });
+
 

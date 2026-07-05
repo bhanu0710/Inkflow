@@ -175,6 +175,27 @@ export class AuthService {
 
     return userWithoutHash;
   }
+
+  async updateProfile(
+    userId: string,
+    data: { displayName?: string; username?: string }
+  ): Promise<Omit<User, "passwordHash">> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new AuthenticationError("Authentication required");
+    }
+
+    const updatedUser = await this.userRepository.update(userId, {
+      displayName: data.displayName,
+      username: data.username,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _, ...userWithoutHash } = updatedUser;
+
+    return userWithoutHash;
+  }
 }
+
 
 

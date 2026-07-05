@@ -5,6 +5,7 @@ import { registerSchema } from "../validation/schemas/auth/register.schema.js";
 import { loginSchema } from "../validation/schemas/auth/login.schema.js";
 import { refreshSchema } from "../validation/schemas/auth/refresh.schema.js";
 import { logoutSchema } from "../validation/schemas/auth/logout.schema.js";
+import { updateProfileSchema } from "../validation/schemas/auth/update-profile.schema.js";
 import { createAuthMiddleware } from "../middlewares/auth.middleware.js";
 import { UserRepository, RefreshTokenRepository, PrismaTransactionManager } from "../repositories/index.js";
 import { AuthService } from "../services/auth.service.js";
@@ -46,3 +47,6 @@ authRouter.get("/me", authenticate, (req, res, next) => {
   authController.me(req, res, next).catch(next);
 });
 
+authRouter.patch("/me", authenticate, validateRequest(updateProfileSchema), (req, res, next) => {
+  authController.updateProfile(req, res, next).catch(next);
+});

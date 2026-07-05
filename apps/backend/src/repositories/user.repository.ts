@@ -50,7 +50,7 @@ export class UserRepository {
 
   async update(
     id: string,
-    data: { displayName?: string; passwordHash?: string },
+    data: { displayName?: string; username?: string; passwordHash?: string },
     tx?: TransactionContext
   ): Promise<User> {
     try {
@@ -62,6 +62,7 @@ export class UserRepository {
       throw mapPrismaError(error, "User");
     }
   }
+
 
   async deleteById(id: string, tx?: TransactionContext): Promise<User> {
     try {
