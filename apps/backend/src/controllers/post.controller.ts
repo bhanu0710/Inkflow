@@ -160,7 +160,21 @@ export class PostController {
       next(error);
     }
   };
+
+  getPublic = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { slug } = req.params as { slug: string };
+
+      const post = await this.postService.getPublishedBySlug(slug);
+
+      const responsePayload = ok(post);
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+
 
 
 

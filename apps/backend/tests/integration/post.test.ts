@@ -994,7 +994,104 @@ describe("Post Integration Tests (Mocked DB)", () => {
       expect(error.code).toBe("UNAUTHENTICATED");
     });
   });
+
+  describe("GET /api/v1/posts/public/:slug", () => {
+
+    const testSlug = "hello-world-slug";
+
+    it("should successfully retrieve a published post by its slug (without authentication)", async () => {
+      const mockPublishedPost = {
+        id: "mock-post-uuid-123",
+        authorId: "some-author-uuid",
+        title: "Hello World Post",
+        slug: testSlug,
+        markdownContent: "Welcome to public posts content.",
+        status: "PUBLISHED",
+        readingTimeMinutes: 3,
+        publishedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPublishedPost as any);
+
+      const response = await request(app)
+        .get(`/api/v1/posts/public/${testSlug}`);
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.id).toBe(mockPublishedPost.id);
+      expect(data.title).toBe(mockPublishedPost.title);
+      expect(data.slug).toBe(testSlug);
+      expect(data.markdownContent).toBe(mockPublishedPost.markdownContent);
+      expect(data.status).toBe("PUBLISHED");
+      expect(data.readingTimeMinutes).toBe(3);
+      expect(data.publishedAt).toBeDefined();
+
+      expect(prisma.post.findUnique).toHaveBeenCalledWith({
+        where: { slug: testSlug },
+        include: expect.any(Object),
+      });
+    });
+
+    it("should fail with 404 when post slug does not exist", async () => {
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .get(`/api/v1/posts/public/${testSlug}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("should fail with 404 when post exists but is in DRAFT status (no leaks)", async () => {
+      const mockDraftPost = {
+        id: "mock-post-uuid-123",
+        authorId: "some-author-uuid",
+        title: "Draft Post Title",
+        slug: testSlug,
+        markdownContent: "Draft content.",
+        status: "DRAFT",
+        readingTimeMinutes: 2,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockDraftPost as any);
+
+      const response = await request(app)
+        .get(`/api/v1/posts/public/${testSlug}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("should fail with 400 when slug parameter is invalid (empty)", async () => {
+      const response = await request(app)
+        .get("/api/v1/posts/public/%20");
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+  });
 });
+
 
 
 

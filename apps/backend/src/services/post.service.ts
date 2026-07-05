@@ -182,7 +182,21 @@ export class PostService {
 
     await this.postRepository.delete(postId);
   }
+
+  async getPublishedBySlug(slug: string): Promise<Post> {
+    const post = await this.postRepository.findBySlug(slug);
+    if (!post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.status !== "PUBLISHED") {
+      throw new NotFoundError("Post not found");
+    }
+
+    return post;
+  }
 }
+
 
 
 
