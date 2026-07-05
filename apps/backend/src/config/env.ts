@@ -15,8 +15,11 @@ const envSchema = z.object({
   BCRYPT_COST: z.coerce.number().int().positive().default(10),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters long"),
-  JWT_ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(15)
+  JWT_ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(15),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(100)
 });
+
 
 
 

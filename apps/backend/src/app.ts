@@ -9,6 +9,7 @@ import { apiRouter } from "./routes/index.js";
 
 import { swaggerUiServe, swaggerUiSetup } from "./lib/swagger/index.js";
 import { requestLoggingMiddleware } from "./middlewares/request-logging.middleware.js";
+import { rateLimitMiddleware } from "./middlewares/rate-limit.middleware.js";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware.js";
 
 export const createApp = () => {
@@ -17,9 +18,13 @@ export const createApp = () => {
   // 1. Request Logging & Request ID (Correlation ID)
   app.use(requestLoggingMiddleware);
 
-  // 2. Security headers
+  // 2. Rate Limiting
+  app.use(rateLimitMiddleware);
+
+  // 3. Security headers
   app.use(helmet());
   app.use(cors({ origin: env.BACKEND_CORS_ORIGIN }));
+
 
   // 3. Compression
   app.use(compression());
