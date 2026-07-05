@@ -143,6 +143,38 @@ export class AuthService {
       accessToken: newAccessToken,
       refreshToken: newPlaintextToken,
     };
+  }
 
+  async logout(refreshToken: string): Promise<void> {
+    const incomingHash = this.tokenService.hashToken(refreshToken);
+
+    const storedToken = await this.refreshTokenRepository.findByTokenHash(incomingHash);
+    if (!storedToken) {
+      return;
+    }
+
+    if (storedToken.revokedAt !== null) {
+      return;
+    }
+
+    if (storedToken.expiresAt < new Date()) {
+      return;
+    }
+
+    await this.refreshTokenRepository.revokeById(storedToken.id);
+  }
+
+  async me(userId: string): Promise<Omit<User, "passwordHash">> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new AuthenticationError("Authentication required");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _, ...userWithoutHash } = user;
+
+    return userWithoutHash;
   }
 }
+
+

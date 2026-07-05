@@ -301,5 +301,360 @@ describe("Authentication Integration Tests (Mocked DB)", () => {
       expect(body.error.message).toBe("Invalid refresh token");
     });
   });
+
+  describe("POST /api/v1/auth/logout", () => {
+    const validRawToken = "validPlaintextRefreshTokenHereButExtremelyLongForHex";
+    const validHashedToken = createHash("sha256").update(validRawToken).digest("hex");
+
+    it("should successfully logout with a valid active refresh token", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        revokedAt: null,
+        createdAt: new Date(),
+      } as any);
+
+      vi.mocked(prisma.refreshToken.update).mockResolvedValue({
+        id: "mock-token-uuid",
+        revokedAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      expect(response.status).toBe(204);
+      expect(response.body).toEqual({});
+      expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
+        where: { tokenHash: validHashedToken },
+      });
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: "mock-token-uuid" },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it("should return 204 successfully on invalid token (idempotency)", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue(null);
+
+      const response = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({
+          refreshToken: "invalid-token",
+        });
+
+      expect(response.status).toBe(204);
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it("should return 204 successfully on already revoked token (idempotency)", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        revokedAt: new Date(),
+        createdAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      expect(response.status).toBe(204);
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it("should return 204 successfully on expired token (idempotency)", async () => {
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValue({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() - 1000 * 60), // expired 1 min ago
+        revokedAt: null,
+        createdAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      expect(response.status).toBe(204);
+      expect(prisma.refreshToken.update).not.toHaveBeenCalled();
+    });
+
+    it("should succeed twice on consecutive logouts (idempotency)", async () => {
+      // First call (valid token)
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValueOnce({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        revokedAt: null,
+        createdAt: new Date(),
+      } as any);
+
+      vi.mocked(prisma.refreshToken.update).mockResolvedValue({
+        id: "mock-token-uuid",
+        revokedAt: new Date(),
+      } as any);
+
+      let response = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      expect(response.status).toBe(204);
+
+      // Second call (mocked to now return already revoked token)
+      vi.mocked(prisma.refreshToken.findUnique).mockResolvedValueOnce({
+        id: "mock-token-uuid",
+        userId: "mock-user-uuid",
+        tokenHash: validHashedToken,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+        revokedAt: new Date(),
+        createdAt: new Date(),
+      } as any);
+
+      response = await request(app)
+        .post("/api/v1/auth/logout")
+        .send({
+          refreshToken: validRawToken,
+        });
+
+      expect(response.status).toBe(204);
+    });
+  });
+
+  describe("GET /api/v1/auth/protected (JWT Authentication Middleware)", () => {
+    const testUserId = "mock-user-uuid";
+    const testEmail = "test@example.com";
+
+    it("should successfully authenticate with a valid JWT and reach the route handler", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      const response = await request(app)
+        .get("/api/v1/auth/protected")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual({ message: "Authenticated" });
+    });
+
+    it("should fail when Authorization header is missing", async () => {
+      const response = await request(app)
+        .get("/api/v1/auth/protected");
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when Authorization header format is malformed (no Bearer prefix)", async () => {
+      const response = await request(app)
+        .get("/api/v1/auth/protected")
+        .set("Authorization", "Token abc-123-xyz");
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when Bearer token is empty", async () => {
+      const response = await request(app)
+        .get("/api/v1/auth/protected")
+        .set("Authorization", "Bearer ");
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when JWT has expired", async () => {
+      const expiredToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: -60 } // expired 60s ago
+      );
+
+      const response = await request(app)
+        .get("/api/v1/auth/protected")
+        .set("Authorization", `Bearer ${expiredToken}`);
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when JWT signature is invalid", async () => {
+      const invalidSigToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        "wrong-secret-signature-here-with-sufficient-length-to-pass-standards",
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      const response = await request(app)
+        .get("/api/v1/auth/protected")
+        .set("Authorization", `Bearer ${invalidSigToken}`);
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when JWT is malformed", async () => {
+      const response = await request(app)
+        .get("/api/v1/auth/protected")
+        .set("Authorization", "Bearer malformed.jwt.token");
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+  });
+
+  describe("GET /api/v1/auth/me", () => {
+    const testUserId = "mock-user-uuid";
+    const testEmail = "test-me-integration@example.com";
+    const testUsername = "testmeintegration";
+    const testDisplayName = "Test User Me Integration";
+
+    it("should successfully return authenticated user profile and omit passwordHash", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: testUserId,
+        email: testEmail,
+        username: testUsername,
+        displayName: testDisplayName,
+        passwordHash: "someHashToExclude",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const response = await request(app)
+        .get("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.id).toBe(testUserId);
+      expect(data.email).toBe(testEmail);
+      expect(data.username).toBe(testUsername);
+      expect(data.displayName).toBe(testDisplayName);
+      expect(data.passwordHash).toBeUndefined();
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: testUserId },
+      });
+    });
+
+
+    it("should fail when Authorization header is missing", async () => {
+      const response = await request(app)
+        .get("/api/v1/auth/me");
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when Authorization header is malformed", async () => {
+      const response = await request(app)
+        .get("/api/v1/auth/me")
+        .set("Authorization", "Token abc-123");
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when JWT signature is invalid", async () => {
+      const invalidSigToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        "wrong-secret-to-fail-signature-verification-instantly",
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      const response = await request(app)
+        .get("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${invalidSigToken}`);
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+
+    it("should fail when user is deleted after token issuance", async () => {
+      const validToken = jwt.sign(
+        { userId: testUserId, email: testEmail },
+        env.JWT_ACCESS_SECRET,
+        { algorithm: "HS256", expiresIn: 60 }
+      );
+
+      // Mock user lookup to return null (meaning user has been deleted)
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+
+      const response = await request(app)
+        .get("/api/v1/auth/me")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe("UNAUTHENTICATED");
+      expect(body.error.message).toBe("Authentication required");
+    });
+  });
 });
 

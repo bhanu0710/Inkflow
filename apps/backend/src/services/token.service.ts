@@ -3,7 +3,8 @@ import jwt from "jsonwebtoken";
 import type { RefreshTokenRepository } from "../repositories/index.js";
 import type { TransactionContext } from "../repositories/transaction-context.js";
 import { env } from "../config/env.js";
-import { InternalServerError } from "../errors/app.errors.js";
+import { InternalServerError, AuthenticationError } from "../errors/app.errors.js";
+
 
 export interface AccessTokenPayload {
   userId: string;
@@ -73,4 +74,23 @@ export class TokenService {
       throw new InternalServerError("Failed to sign access token", error);
     }
   }
+
+  verifyAccessToken(token: string): AccessTokenPayload {
+    try {
+      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+        algorithms: ["HS256"],
+      }) as AccessTokenPayload;
+
+      // Basic validation of decoded payload structure to guarantee strong typing
+      if (!decoded || typeof decoded.userId !== "string" || typeof decoded.email !== "string") {
+        throw new AuthenticationError("Invalid access token structure");
+      }
+
+      return decoded;
+    } catch (error) {
+      // Always throw standard generic AuthenticationError, never leaking internal JWT errors
+      throw new AuthenticationError("Invalid or expired access token", error);
+    }
+  }
 }
+

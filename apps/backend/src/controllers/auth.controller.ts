@@ -1,6 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthService } from "../services/auth.service.js";
-import { created, ok } from "../lib/response/index.js";
+import { created, ok, noContent } from "../lib/response/index.js";
+import { AuthenticationError } from "../errors/app.errors.js";
+
+
 
 /**
  * Authentication controller handling HTTP registrations, logins, and token refreshes.
@@ -72,4 +75,37 @@ export class AuthController {
       next(error);
     }
   };
+
+  logout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { refreshToken } = req.body as {
+        refreshToken: string;
+      };
+
+      await this.authService.logout(refreshToken);
+
+      noContent();
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  me = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AuthenticationError("Authentication required");
+      }
+
+      const userProfile = await this.authService.me(userId);
+
+      const responsePayload = ok(userProfile);
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+
+

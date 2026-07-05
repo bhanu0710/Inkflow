@@ -5,8 +5,13 @@ declare global {
       userId?: string;
       sessionId?: string;
       traceId?: string;
+      user?: {
+        id: string;
+        email: string;
+      };
     }
   }
 }
+
 
 export {};
