@@ -24,7 +24,10 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
     },
+
 
     refreshToken: {
       create: vi.fn(),
@@ -707,7 +710,156 @@ describe("Post Integration Tests (Mocked DB)", () => {
       expect(error.message).toBe("Post is already published.");
     });
   });
+
+  describe("GET /api/v1/posts", () => {
+    it("should successfully retrieve only the authenticated user's posts ordered by newest first", async () => {
+      const mockPosts = [
+        {
+          id: "post-uuid-2",
+          authorId: testUserId,
+          title: "Second Post",
+          slug: "second-post",
+          markdownContent: "content",
+          status: "DRAFT",
+          readingTimeMinutes: 1,
+          publishedAt: null,
+          createdAt: new Date("2026-07-05T12:00:00.000Z"),
+          updatedAt: new Date("2026-07-05T12:00:00.000Z"),
+        },
+        {
+          id: "post-uuid-1",
+          authorId: testUserId,
+          title: "First Post",
+          slug: "first-post",
+          markdownContent: "content",
+          status: "PUBLISHED",
+          readingTimeMinutes: 1,
+          publishedAt: new Date("2026-07-05T10:00:00.000Z"),
+          createdAt: new Date("2026-07-05T10:00:00.000Z"),
+          updatedAt: new Date("2026-07-05T10:00:00.000Z"),
+        },
+      ];
+
+      vi.mocked(prisma.post.findMany).mockResolvedValueOnce(mockPosts as any);
+      vi.mocked(prisma.post.count).mockResolvedValueOnce(2);
+
+      const response = await request(app)
+        .get("/api/v1/posts")
+        .set("Authorization", `Bearer ${validToken}`)
+        .query({ page: 1, limit: 10 });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>[];
+      const meta = body.meta as unknown as Record<string, unknown>;
+
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data).toHaveLength(2);
+      expect(data[0].id).toBe("post-uuid-2"); // newest first
+      expect(data[1].id).toBe("post-uuid-1");
+      expect(meta.totalCount).toBe(2);
+      expect(meta.page).toBe(1);
+      expect(meta.limit).toBe(10);
+      expect(meta.totalPages).toBe(1);
+
+      expect(prisma.post.findMany).toHaveBeenCalledWith({
+        where: { authorId: testUserId },
+        take: 10,
+        skip: 0,
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+    });
+
+    it("should return empty list when user has no posts", async () => {
+      vi.mocked(prisma.post.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.post.count).mockResolvedValueOnce(0);
+
+      const response = await request(app)
+        .get("/api/v1/posts")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as any[];
+      const meta = body.meta as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data).toHaveLength(0);
+      expect(meta.totalCount).toBe(0);
+      expect(meta.totalPages).toBe(0);
+    });
+
+    it("should respect pagination limit and skip values on page 2", async () => {
+      vi.mocked(prisma.post.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.post.count).mockResolvedValueOnce(25);
+
+      const response = await request(app)
+        .get("/api/v1/posts")
+        .set("Authorization", `Bearer ${validToken}`)
+        .query({ page: 2, limit: 10 });
+
+      const body = response.body as TestResponse;
+      const meta = body.meta as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(meta.page).toBe(2);
+      expect(meta.limit).toBe(10);
+      expect(meta.totalPages).toBe(3);
+
+      expect(prisma.post.findMany).toHaveBeenCalledWith({
+        where: { authorId: testUserId },
+        take: 10,
+        skip: 10, // skipping first 10 items for page 2
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+    });
+
+    it("should fail with 400 validation error on invalid page query param", async () => {
+      const response = await request(app)
+        .get("/api/v1/posts")
+        .set("Authorization", `Bearer ${validToken}`)
+        .query({ page: -1 });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 400 validation error on invalid limit query param (exceeds max 100)", async () => {
+      const response = await request(app)
+        .get("/api/v1/posts")
+        .set("Authorization", `Bearer ${validToken}`)
+        .query({ limit: 101 });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 401 when Authorization header is missing", async () => {
+      const response = await request(app).get("/api/v1/posts");
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("UNAUTHENTICATED");
+    });
+  });
 });
+
 
 
 

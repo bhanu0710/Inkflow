@@ -5,6 +5,7 @@ import { createPostSchema } from "../validation/schemas/post/create-post.schema.
 import { getPostSchema } from "../validation/schemas/post/get-post.schema.js";
 import { updatePostSchema } from "../validation/schemas/post/update-post.schema.js";
 import { publishPostSchema } from "../validation/schemas/post/publish-post.schema.js";
+import { listPostsSchema } from "../validation/schemas/post/list-posts.schema.js";
 import { createAuthMiddleware } from "../middlewares/auth.middleware.js";
 import { PostRepository, RefreshTokenRepository } from "../repositories/index.js";
 import { PostService } from "../services/post.service.js";
@@ -20,6 +21,10 @@ const tokenService = new TokenService(refreshTokenRepository);
 const authenticate = createAuthMiddleware(tokenService);
 
 export const postRouter = Router();
+
+postRouter.get("/", authenticate, validateRequest(listPostsSchema), (req, res, next) => {
+  postController.list(req, res, next).catch(next);
+});
 
 postRouter.post("/", authenticate, validateRequest(createPostSchema), (req, res, next) => {
   postController.create(req, res, next).catch(next);

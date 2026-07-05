@@ -137,7 +137,36 @@ export class PostService {
       publishedAt,
     });
   }
+
+  async listByAuthor(
+    currentUserId: string,
+    pagination: { page: number; limit: number }
+  ): Promise<{
+    items: Post[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }> {
+    const offset = (pagination.page - 1) * pagination.limit;
+
+    const { items, total } = await this.postRepository.findByAuthor(currentUserId, {
+      limit: pagination.limit,
+      offset,
+    });
+
+    const totalPages = Math.ceil(total / pagination.limit);
+
+    return {
+      items,
+      page: pagination.page,
+      limit: pagination.limit,
+      total,
+      totalPages,
+    };
+  }
 }
+
 
 
 
