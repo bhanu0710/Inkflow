@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { logger } from "../lib/logger/index.js";
 
+import { getActiveTraceId } from "../lib/tracing/index.js";
+
 const REQUEST_ID_HEADER = "x-request-id";
 
 /**
@@ -32,10 +34,13 @@ export const requestLoggingMiddleware = (
   const userAgent = req.header("user-agent") || "";
   const startTime = performance.now();
 
+  const traceId = getActiveTraceId();
+
   // Log Request Start
   logger.info(
     {
       requestId,
+      traceId,
       method,
       path,
       ip,
@@ -48,10 +53,12 @@ export const requestLoggingMiddleware = (
   res.on("finish", () => {
     const endTime = performance.now();
     const durationMs = parseFloat((endTime - startTime).toFixed(2));
+    const currentTraceId = getActiveTraceId();
 
     logger.info(
       {
         requestId,
+        traceId: currentTraceId,
         method,
         path,
         statusCode: res.statusCode,
@@ -63,3 +70,4 @@ export const requestLoggingMiddleware = (
 
   next();
 };
+

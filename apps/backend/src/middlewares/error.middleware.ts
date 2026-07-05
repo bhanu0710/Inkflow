@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { logger } from "../lib/logger/index.js";
+import { getActiveTraceId } from "../lib/tracing/index.js";
 import {
   AppError,
   NotFoundError,
@@ -45,12 +46,14 @@ export const errorMiddleware = (
   }
 
   const requestId = request.requestId || "unknown";
+  const traceId = getActiveTraceId();
   const isProduction = process.env.NODE_ENV === "production";
 
   if (appError.statusCode >= 500) {
     logger.error(
       {
         requestId,
+        traceId,
         errorCode: appError.errorCode,
         statusCode: appError.statusCode,
         error: {
@@ -65,6 +68,7 @@ export const errorMiddleware = (
     logger.warn(
       {
         requestId,
+        traceId,
         errorCode: appError.errorCode,
         statusCode: appError.statusCode,
         message: appError.message,

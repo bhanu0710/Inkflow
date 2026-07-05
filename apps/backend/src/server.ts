@@ -1,7 +1,11 @@
+import { initTelemetry } from "./lib/tracing/index.js";
+initTelemetry();
+
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger/index.js";
 import { disconnectPrisma } from "./repositories/prisma.repository.js";
+
 
 const app = createApp();
 let isShuttingDown = false;

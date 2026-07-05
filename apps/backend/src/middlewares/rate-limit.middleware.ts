@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger/index.js";
+import { getActiveTraceId } from "../lib/tracing/index.js";
 
 /**
  * Middleware providing production-ready API rate limiting.
@@ -29,6 +30,7 @@ export const rateLimitMiddleware = rateLimit({
     const request = req as Request;
     const response = res as Response;
     const requestId = request.requestId || "unknown";
+    const traceId = getActiveTraceId();
     const { method, path } = request;
     const ip = request.ip || "unknown";
 
@@ -36,6 +38,7 @@ export const rateLimitMiddleware = rateLimit({
     logger.warn(
       {
         requestId,
+        traceId,
         ip,
         method,
         path,
