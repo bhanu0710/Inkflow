@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import type { PostService } from "../services/post.service.js";
-import { created } from "../lib/response/index.js";
+import { created, ok } from "../lib/response/index.js";
+
 import { AuthenticationError } from "../errors/app.errors.js";
 
 /**
@@ -42,4 +43,21 @@ export class PostController {
     }
   };
 
+  getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AuthenticationError("Authentication required");
+      }
+
+      const { postId } = req.params as { postId: string };
+
+      const post = await this.postService.getById(postId, currentUserId);
+
+      const responsePayload = ok(post);
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

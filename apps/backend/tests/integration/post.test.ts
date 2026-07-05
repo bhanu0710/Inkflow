@@ -183,4 +183,110 @@ describe("Post Integration Tests (Mocked DB)", () => {
       });
     });
   });
+
+  describe("GET /api/v1/posts/:postId", () => {
+    const testPostId = "8bc7d100-349f-4318-bf12-58b4279b778f";
+
+    it("should successfully retrieve the post if owned by the authenticated user", async () => {
+      const mockPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "Test Post Title",
+        slug: "test-post-title",
+        markdownContent: "Test Content",
+        status: "DRAFT",
+        readingTimeMinutes: 2,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPost as any);
+
+      const response = await request(app)
+        .get(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data.id).toBe(testPostId);
+      expect(data.authorId).toBe(testUserId);
+      expect(data.title).toBe("Test Post Title");
+      expect(data.slug).toBe("test-post-title");
+      expect(data.status).toBe("DRAFT");
+      expect(data.readingTimeMinutes).toBe(2);
+    });
+
+    it("should fail with 400 when param postId is an invalid UUID", async () => {
+      const response = await request(app)
+        .get("/api/v1/posts/invalid-uuid-format")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 401 when Authorization header is missing", async () => {
+      const response = await request(app)
+        .get(`/api/v1/posts/${testPostId}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("UNAUTHENTICATED");
+    });
+
+    it("should fail with 404 when post does not exist in database", async () => {
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .get(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+
+    it("should fail with 404 when post is owned by another user (no info leakage)", async () => {
+      const mockPostOfAnotherUser = {
+        id: testPostId,
+        authorId: "another-user-uuid-12345", // owned by someone else
+        title: "Secret Post",
+        slug: "secret-post",
+        markdownContent: "Secret content",
+        status: "DRAFT",
+        readingTimeMinutes: 5,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPostOfAnotherUser as any);
+
+      const response = await request(app)
+        .get(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND"); // secure 404, not 403 Forbidden!
+    });
+  });
 });
+

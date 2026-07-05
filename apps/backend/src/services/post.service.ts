@@ -1,5 +1,7 @@
 import type { Post } from "@prisma/client";
 import type { PostRepository } from "../repositories/post.repository.js";
+import { NotFoundError } from "../errors/app.errors.js";
+
 
 /**
  * Post service orchestration.
@@ -59,4 +61,18 @@ export class PostService {
     const words = content.trim().split(/\s+/).filter(Boolean).length;
     return Math.max(1, Math.ceil(words / 200));
   }
+
+  async getById(postId: string, currentUserId: string): Promise<Post> {
+    const post = await this.postRepository.findById(postId);
+    if (!post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.authorId !== currentUserId) {
+      throw new NotFoundError("Post not found");
+    }
+
+    return post;
+  }
 }
+
