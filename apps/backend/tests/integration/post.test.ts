@@ -26,7 +26,9 @@ vi.mock("../../src/repositories/prisma.repository.js", () => {
       update: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
+      delete: vi.fn(),
     },
+
 
 
     refreshToken: {
@@ -858,7 +860,142 @@ describe("Post Integration Tests (Mocked DB)", () => {
       expect(error.code).toBe("UNAUTHENTICATED");
     });
   });
+
+
+  describe("DELETE /api/v1/posts/:postId", () => {
+
+    const testPostId = "8bc7d100-349f-4318-bf12-58b4279b778f";
+
+    it("should successfully delete own draft post and return 204 No Content", async () => {
+      const mockPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "My Draft Post",
+        slug: "my-draft-post",
+        markdownContent: "Draft content",
+        status: "DRAFT",
+        readingTimeMinutes: 2,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPost as any);
+      vi.mocked(prisma.post.delete).mockResolvedValueOnce(mockPost as any);
+
+      const response = await request(app)
+        .delete(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(204);
+      expect(response.body).toEqual({}); // no response body
+      expect(prisma.post.delete).toHaveBeenCalledTimes(1);
+      expect(prisma.post.delete).toHaveBeenCalledWith({
+        where: { id: testPostId },
+      });
+    });
+
+    it("should fail with 404 when trying to delete another user's draft post (no leaks)", async () => {
+      const mockPostOfAnotherUser = {
+        id: testPostId,
+        authorId: "another-user-uuid",
+        title: "Another Draft Post",
+        slug: "another-draft-post",
+        markdownContent: "Draft content",
+        status: "DRAFT",
+        readingTimeMinutes: 2,
+        publishedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPostOfAnotherUser as any);
+
+      const response = await request(app)
+        .delete(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+      expect(prisma.post.delete).not.toHaveBeenCalled();
+    });
+
+    it("should fail with 404 when post does not exist in database", async () => {
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .delete(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(404);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_NOT_FOUND");
+      expect(prisma.post.delete).not.toHaveBeenCalled();
+    });
+
+    it("should fail with 409 Conflict if post is already published", async () => {
+      const mockPublishedPost = {
+        id: testPostId,
+        authorId: testUserId,
+        title: "Already Published",
+        slug: "already-published",
+        markdownContent: "Content",
+        status: "PUBLISHED",
+        readingTimeMinutes: 2,
+        publishedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValueOnce(mockPublishedPost as any);
+
+      const response = await request(app)
+        .delete(`/api/v1/posts/${testPostId}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(409);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("RESOURCE_CONFLICT");
+      expect(error.message).toBe("Published posts cannot be deleted.");
+      expect(prisma.post.delete).not.toHaveBeenCalled();
+    });
+
+    it("should fail with 400 when param postId is an invalid UUID format", async () => {
+      const response = await request(app)
+        .delete("/api/v1/posts/invalid-uuid-format")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 401 when Authorization header is missing", async () => {
+      const response = await request(app).delete(`/api/v1/posts/${testPostId}`);
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(401);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("UNAUTHENTICATED");
+    });
+  });
 });
+
 
 
 

@@ -171,6 +171,15 @@ export class PostRepository {
     }
   }
 
+  async delete(id: string, tx?: TransactionContext): Promise<Post> {
+    try {
+      return await this.getClient(tx).post.delete({ where: { id } });
+    } catch (error) {
+      throw mapPrismaError(error, "Post");
+    }
+  }
+
+
   async deleteManyByAuthorId(authorId: string, tx?: TransactionContext): Promise<Prisma.BatchPayload> {
     try {
       return await this.getClient(tx).post.deleteMany({

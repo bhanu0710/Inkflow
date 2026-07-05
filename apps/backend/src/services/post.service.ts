@@ -165,7 +165,25 @@ export class PostService {
       totalPages,
     };
   }
+
+  async delete(postId: string, currentUserId: string): Promise<void> {
+    const post = await this.postRepository.findById(postId);
+    if (!post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.authorId !== currentUserId) {
+      throw new NotFoundError("Post not found");
+    }
+
+    if (post.status !== "DRAFT") {
+      throw new ConflictError("Published posts cannot be deleted.");
+    }
+
+    await this.postRepository.delete(postId);
+  }
 }
+
 
 
 

@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
 import type { PostService } from "../services/post.service.js";
-import { created, ok, paginated } from "../lib/response/index.js";
-
+import { created, ok, paginated, noContent } from "../lib/response/index.js";
 import { AuthenticationError } from "../errors/app.errors.js";
+
 
 /**
  * Controller mapping HTTP request contexts for the Post domain.
@@ -142,7 +142,26 @@ export class PostController {
       next(error);
     }
   };
+
+  delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUserId = req.user?.id;
+      if (!currentUserId) {
+        throw new AuthenticationError("Authentication required");
+      }
+
+      const { postId } = req.params as { postId: string };
+
+      await this.postService.delete(postId, currentUserId);
+
+      noContent();
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+
 
 
 
