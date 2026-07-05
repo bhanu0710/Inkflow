@@ -6,21 +6,20 @@ import helmet from "helmet";
 import { env } from "./config/env.js";
 import { healthRouter } from "./health/index.js";
 import { apiRouter } from "./routes/index.js";
-import { httpLogger } from "./lib/logger/index.js";
 
 import { swaggerUiServe, swaggerUiSetup } from "./lib/swagger/index.js";
-import { requestContextMiddleware } from "./middlewares/request-context.middleware.js";
+import { requestLoggingMiddleware } from "./middlewares/request-logging.middleware.js";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware.js";
 
 export const createApp = () => {
   const app = express();
 
-  // 1. Security headers
+  // 1. Request Logging & Request ID (Correlation ID)
+  app.use(requestLoggingMiddleware);
+
+  // 2. Security headers
   app.use(helmet());
   app.use(cors({ origin: env.BACKEND_CORS_ORIGIN }));
-
-  // 2. Request ID correlation
-  app.use(requestContextMiddleware);
 
   // 3. Compression
   app.use(compression());
@@ -28,13 +27,11 @@ export const createApp = () => {
   // 4. JSON Parser
   app.use(express.json());
 
-  // 5. HTTP Logging
-  app.use(httpLogger);
-
-  // 6. Routes
+  // 5. Routes
   app.use(healthRouter);
   app.use("/api/v1", apiRouter);
   app.use("/docs", ...swaggerUiServe, swaggerUiSetup);
+
 
 
   // 7. 404 Handler
