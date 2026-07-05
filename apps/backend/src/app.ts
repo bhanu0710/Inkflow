@@ -10,6 +10,8 @@ import { apiRouter } from "./routes/index.js";
 import { swaggerUiServe, swaggerUiSetup } from "./lib/swagger/index.js";
 import { requestLoggingMiddleware } from "./middlewares/request-logging.middleware.js";
 import { rateLimitMiddleware } from "./middlewares/rate-limit.middleware.js";
+import { metricsMiddleware } from "./middlewares/metrics.middleware.js";
+import { registry } from "./lib/metrics/index.js";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware.js";
 
 export const createApp = () => {
@@ -21,21 +23,32 @@ export const createApp = () => {
   // 2. Rate Limiting
   app.use(rateLimitMiddleware);
 
-  // 3. Security headers
+  // 3. Metrics Collection
+  app.use(metricsMiddleware);
+
+  // 4. Security headers
   app.use(helmet());
   app.use(cors({ origin: env.BACKEND_CORS_ORIGIN }));
 
 
-  // 3. Compression
+  // 5. Compression
   app.use(compression());
 
-  // 4. JSON Parser
+  // 6. JSON Parser
   app.use(express.json());
 
-  // 5. Routes
+  // 7. Routes
+  app.get("/metrics", (req, res, next) => {
+    res.setHeader("Content-Type", registry.contentType);
+    registry.metrics()
+      .then((data) => res.end(data))
+      .catch(next);
+
+  });
   app.use(healthRouter);
   app.use("/api/v1", apiRouter);
   app.use("/docs", ...swaggerUiServe, swaggerUiSetup);
+
 
 
 

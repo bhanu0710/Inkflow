@@ -21,8 +21,9 @@ export const rateLimitMiddleware = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     const request = req as Request;
-    const excludedPaths = ["/health", "/health/live", "/health/ready"];
+    const excludedPaths = ["/health", "/health/live", "/health/ready", "/metrics"];
     return excludedPaths.includes(request.path);
+
   },
   handler: (req, res) => {
     const request = req as Request;
