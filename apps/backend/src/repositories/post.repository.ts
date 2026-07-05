@@ -171,8 +171,35 @@ export class PostRepository {
     }
   }
 
+  async findPublished(
+    pagination: { limit: number; offset: number },
+    tx?: TransactionContext
+  ): Promise<{ items: Post[]; total: number }> {
+    try {
+      const client = this.getClient(tx);
+      const [items, total] = await Promise.all([
+        client.post.findMany({
+          where: { status: "PUBLISHED" },
+          take: pagination.limit,
+          skip: pagination.offset,
+          orderBy: [
+            { publishedAt: "desc" },
+            { createdAt: "desc" },
+          ],
+        }),
+        client.post.count({
+          where: { status: "PUBLISHED" },
+        }),
+      ]);
+      return { items, total };
+    } catch (error) {
+      throw mapPrismaError(error, "Post");
+    }
+  }
+
   async delete(id: string, tx?: TransactionContext): Promise<Post> {
     try {
+
       return await this.getClient(tx).post.delete({ where: { id } });
     } catch (error) {
       throw mapPrismaError(error, "Post");

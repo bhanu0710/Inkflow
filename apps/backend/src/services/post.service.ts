@@ -195,7 +195,35 @@ export class PostService {
 
     return post;
   }
+
+  async listPublished(
+    pagination: { page: number; limit: number }
+  ): Promise<{
+    items: Post[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }> {
+    const offset = (pagination.page - 1) * pagination.limit;
+
+    const { items, total } = await this.postRepository.findPublished({
+      limit: pagination.limit,
+      offset,
+    });
+
+    const totalPages = Math.ceil(total / pagination.limit);
+
+    return {
+      items,
+      page: pagination.page,
+      limit: pagination.limit,
+      total,
+      totalPages,
+    };
+  }
 }
+
 
 
 

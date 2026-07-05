@@ -173,7 +173,42 @@ export class PostController {
       next(error);
     }
   };
+
+  listPublic = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { page, limit } = req.query as { page?: number; limit?: number };
+
+      const parsedPage = Number(page) || 1;
+      const parsedLimit = Number(limit) || 20;
+
+      const result = await this.postService.listPublished({
+        page: parsedPage,
+        limit: parsedLimit,
+      });
+
+      const responsePayload = paginated(
+        result.items,
+        {
+          nextCursor: null,
+          previousCursor: null,
+          hasNextPage: parsedPage < result.totalPages,
+          hasPreviousPage: parsedPage > 1,
+          totalCount: result.total,
+        },
+        {
+          page: result.page,
+          limit: result.limit,
+          totalPages: result.totalPages,
+        }
+      );
+
+      res.status(200).json(responsePayload);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
+
 
 
 

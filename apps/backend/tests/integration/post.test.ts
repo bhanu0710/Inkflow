@@ -1090,7 +1090,142 @@ describe("Post Integration Tests (Mocked DB)", () => {
       expect(error.code).toBe("VALIDATION_ERROR");
     });
   });
+
+  describe("GET /api/v1/posts/public", () => {
+
+    it("should successfully retrieve published posts with pagination metadata (authentication not required)", async () => {
+      const mockPublishedPosts = [
+        {
+          id: "post-uuid-2",
+          authorId: "author-uuid-1",
+          title: "Second Published Post",
+          slug: "second-published",
+          markdownContent: "content",
+          status: "PUBLISHED",
+          readingTimeMinutes: 2,
+          publishedAt: new Date("2026-07-05T12:00:00.000Z"),
+          createdAt: new Date("2026-07-05T11:59:00.000Z"),
+          updatedAt: new Date("2026-07-05T12:00:00.000Z"),
+        },
+        {
+          id: "post-uuid-1",
+          authorId: "author-uuid-2",
+          title: "First Published Post",
+          slug: "first-published",
+          markdownContent: "content",
+          status: "PUBLISHED",
+          readingTimeMinutes: 1,
+          publishedAt: new Date("2026-07-05T10:00:00.000Z"),
+          createdAt: new Date("2026-07-05T09:59:00.000Z"),
+          updatedAt: new Date("2026-07-05T10:00:00.000Z"),
+        },
+      ];
+
+      vi.mocked(prisma.post.findMany).mockResolvedValueOnce(mockPublishedPosts as any);
+      vi.mocked(prisma.post.count).mockResolvedValueOnce(2);
+
+      const response = await request(app)
+        .get("/api/v1/posts/public")
+        .query({ page: 1, limit: 10 });
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>[];
+      const meta = body.meta as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data).toHaveLength(2);
+      expect(data[0].id).toBe("post-uuid-2"); // publishedAt DESC
+      expect(data[1].id).toBe("post-uuid-1");
+      expect(meta.totalCount).toBe(2);
+      expect(meta.page).toBe(1);
+      expect(meta.limit).toBe(10);
+      expect(meta.totalPages).toBe(1);
+
+      expect(prisma.post.findMany).toHaveBeenCalledWith({
+        where: { status: "PUBLISHED" },
+        take: 10,
+        skip: 0,
+        orderBy: [
+          { publishedAt: "desc" },
+          { createdAt: "desc" },
+        ],
+      });
+    });
+
+    it("should return empty list when no published posts exist", async () => {
+      vi.mocked(prisma.post.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.post.count).mockResolvedValueOnce(0);
+
+      const response = await request(app)
+        .get("/api/v1/posts/public");
+
+      const body = response.body as TestResponse;
+      const data = body.data as unknown as Record<string, unknown>[];
+      const meta = body.meta as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(data).toHaveLength(0);
+      expect(meta.totalCount).toBe(0);
+      expect(meta.totalPages).toBe(0);
+    });
+
+    it("should respect pagination limit and skip values on page 2", async () => {
+      vi.mocked(prisma.post.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.post.count).mockResolvedValueOnce(25);
+
+      const response = await request(app)
+        .get("/api/v1/posts/public")
+        .query({ page: 2, limit: 10 });
+
+      const body = response.body as TestResponse;
+      const meta = body.meta as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(meta.page).toBe(2);
+      expect(meta.limit).toBe(10);
+      expect(meta.totalPages).toBe(3);
+
+      expect(prisma.post.findMany).toHaveBeenCalledWith({
+        where: { status: "PUBLISHED" },
+        take: 10,
+        skip: 10,
+        orderBy: [
+          { publishedAt: "desc" },
+          { createdAt: "desc" },
+        ],
+      });
+    });
+
+    it("should fail with 400 validation error on invalid page query param", async () => {
+      const response = await request(app)
+        .get("/api/v1/posts/public")
+        .query({ page: 0 });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should fail with 400 validation error on invalid limit query param (exceeds max 100)", async () => {
+      const response = await request(app)
+        .get("/api/v1/posts/public")
+        .query({ limit: 105 });
+
+      const body = response.body as TestResponse;
+      const error = body.error as unknown as Record<string, unknown>;
+
+      expect(response.status).toBe(400);
+      expect(body.success).toBe(false);
+      expect(error.code).toBe("VALIDATION_ERROR");
+    });
+  });
 });
+
 
 
 
