@@ -32,4 +32,7 @@ COPY --from=build --chown=node:node /app/node_modules/@prisma/client node_module
 
 USER node
 
-CMD ["npm", "run", "start", "--workspace", "@inkflow/backend"]
+EXPOSE 3000
+
+CMD ["node", "apps/backend/dist/src/server.js"]
+
